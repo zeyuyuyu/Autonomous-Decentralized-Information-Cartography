@@ -1,53 +1,41 @@
 import os
 import json
-import requests
-import sqlite3
-from datetime import datetime, timedelta
+import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
 
-DB_PATH = 'data.db'
+class InformationFusionEngine:
+    def __init__(self):
+        self.knowledge_graph = nx.DiGraph()
+        self.data_sources = {}
 
-def sync_data():
-    """Synchronize local data with remote source"""
-    try:
-        # Load remote data
-        response = requests.get('https://api.example.com/data')
-        remote_data = response.json()
-    except requests.exceptions.RequestException:
-        # Fetch from local cache if remote is unavailable
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('SELECT data, last_sync FROM cache WHERE id = 1')
-        row = c.fetchone()
-        if row:
-            remote_data = json.loads(row[0])
-            last_sync = datetime.fromisoformat(row[1])
-            if datetime.now() - last_sync < timedelta(hours=1):
-                print('Using cached data from last hour')
-                return remote_data
-        raise Exception('Unable to fetch data')
+    def register_data_source(self, name, data):
+        self.data_sources[name] = data
+        self.fuse_information()
 
-    # Store remote data in local cache
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS cache (id INTEGER PRIMARY KEY, data TEXT, last_sync TEXT)')
-    c.execute('DELETE FROM cache WHERE id = 1')
-    c.execute('INSERT INTO cache (id, data, last_sync) VALUES (1, ?, ?)', (json.dumps(remote_data), datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
+    def fuse_information(self):
+        for name, data in self.data_sources.items():
+            for entity, attributes in data.items():
+                if entity not in self.knowledge_graph:
+                    self.knowledge_graph.add_node(entity, **attributes)
+                else:
+                    for attr, value in attributes.items():
+                        self.knowledge_graph.nodes[entity][attr] = value
 
-    return remote_data
-
-def main():
-    if not os.path.exists(DB_PATH):
-        # Initialize local cache
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('CREATE TABLE cache (id INTEGER PRIMARY KEY, data TEXT, last_sync TEXT)')
-        conn.commit()
-        conn.close()
-
-    data = sync_data()
-    print(data)
+    def visualize_cartography(self, output_path):
+        pos = nx.spring_layout(self.knowledge_graph)
+        plt.figure(figsize=(12, 12))
+        nx.draw(self.knowledge_graph, pos, with_labels=True, node_color='lightblue', edge_color='gray', font_size=10)
+        plt.savefig(output_path)
 
 if __name__ == '__main__':
-    main()
+    engine = InformationFusionEngine()
+    engine.register_data_source('wikipedia', {
+        'Albert Einstein': {'occupation': 'physicist', 'nationality': 'German'},
+        'Nikola Tesla': {'occupation': 'inventor', 'nationality': 'Serbian'}
+    })
+    engine.register_data_source('wikidata', {
+        'Albert Einstein': {'birth_year': 1879, 'death_year': 1955},
+        'Nikola Tesla': {'birth_year': 1856, 'death_year': 1943}
+    })
+    engine.visualize_cartography('knowledge_graph.png')
